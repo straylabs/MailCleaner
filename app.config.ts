@@ -20,7 +20,16 @@ const config: ExpoConfig = {
   web: {
     bundler: "metro",
   },
-  plugins: ["expo-font"],
+  plugins: [
+    "expo-font",
+    [
+      "@react-native-google-signin/google-signin",
+      {
+        iosUrlScheme:
+          "com.googleusercontent.apps.366498185361-8pf5q4lglcn0j4mdn234iuhk7qu28siv",
+      },
+    ],
+  ],
 };
 
 export default config;
