@@ -1,125 +1,158 @@
-import { View, Text, StyleSheet, Alert } from "react-native";
-import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+} from "react-native";
+import React, { useState } from "react";
 import { useTheme } from "@/utils/ThemeContext";
 import Button from "@/components/Button";
 import Screen from "@/components/Screen";
 import { useAuth } from "@/utils/AuthContext";
 import { AppScreenProps } from "@/navigation/types";
+import Avatar from "@/components/Avatar";
+import CustomAlert from "@/components/CustomAlert";
+import { Sun, Moon, LogOut } from "lucide-react-native";
 
 type HomeScreenProps = AppScreenProps<"Home">;
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const { theme, toggleTheme, isDarkMode } = useTheme();
   const { logout } = useAuth();
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [showLogoutAlert, setShowLogoutAlert] = useState(false);
+  // Removed presetInput, now handled in PresetsScreen
 
-  // Simulated syncing logic
-  const performSync = async () => {
-    setIsSyncing(true);
-    try {
-      // Simulate API call to sync emails
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setLastSyncTime(new Date());
-      Alert.alert("Sync Complete", "Your emails have been synchronized successfully.");
-    } catch (error) {
-      Alert.alert("Sync Failed", "Failed to synchronize emails. Please try again.");
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  // Auto-sync on component mount
-  useEffect(() => {
-    performSync();
-  }, []);
+  // Dummy user name and avatar
+  const userName = "John Doe";
+  const userAvatar = null;
 
   return (
     <Screen useSafeArea>
-      <View className="flex-1 justify-center p-4">
-        <View style={styles.welcomeSection}>
-          <Text style={[styles.title, { color: theme.text }]}>
-            Welcome to MailCleaner
-          </Text>
-          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Keep your inbox clean and organized
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Avatar uri={userAvatar} size={40} />
+          <Text style={[styles.userName, { color: theme.text }]}>
+            {userName}
           </Text>
         </View>
-
-        <View style={styles.syncSection}>
-          <Text style={[styles.syncTitle, { color: theme.text }]}>
-            Email Synchronization
-          </Text>
-          {lastSyncTime && (
-            <Text style={[styles.syncTime, { color: theme.textSecondary }]}>
-              Last synced: {lastSyncTime.toLocaleTimeString()}
-            </Text>
-          )}
-          <Button 
-            variant="primary" 
-            style={styles.button} 
-            onPress={performSync}
-            disabled={isSyncing}
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={toggleTheme} style={styles.iconButton}>
+            {isDarkMode ? (
+              <Sun size={28} color={theme.textSecondary} />
+            ) : (
+              <Moon size={28} color={theme.textSecondary} />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setShowLogoutAlert(true)}
+            style={styles.iconButton}
           >
-            {isSyncing ? "Syncing..." : "Sync Now"}
-          </Button>
+            <LogOut size={28} color={theme.textSecondary} />
+          </TouchableOpacity>
         </View>
+      </View>
 
-        <View style={styles.actionsSection}>
-          <Button 
-            variant="outline" 
-            style={styles.button} 
-            onPress={() => navigation.navigate("Presets")}
-          >
-            Manage Presets
-          </Button>
-          
-          <Button variant="outline" style={styles.button} onPress={toggleTheme}>
-            {isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          </Button>
-          
-          <Button variant="secondary" style={styles.button} onPress={logout}>
-            Logout
-          </Button>
-        </View>
+      {/* CustomAlert for logout */}
+      <CustomAlert
+        visible={showLogoutAlert}
+        title="Logout"
+        message="Are you sure you want to logout?"
+        onClose={() => setShowLogoutAlert(false)}
+        buttons={[
+          {
+            text: "Cancel",
+            onPress: () => {},
+            variant: "default",
+          },
+          {
+            text: "Logout",
+            onPress: logout,
+            variant: "destructive",
+          },
+        ]}
+      />
+
+      {/* Main scrollable area */}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        style={{ flex: 1 }}
+      >
+        {/* Empty for now */}
+      </ScrollView>
+
+      {/* Bottom actions */}
+      <View style={styles.bottomSectionRow}>
+        <Button
+          variant="outline"
+          style={styles.bottomButton}
+          onPress={() => navigation.navigate("Presets")}
+        >
+          Manage Presets
+        </Button>
+        <Button
+          variant="primary"
+          style={styles.syncButton}
+          onPress={() => {
+            // Start sync logic here
+            console.log("Start sync pressed");
+          }}
+        >
+          Start Sync
+        </Button>
       </View>
     </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  welcomeSection: {
+  header: {
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom: 32,
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: "transparent",
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: "center",
-  },
-  syncSection: {
-    marginBottom: 32,
+  headerLeft: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 8,
   },
-  syncTitle: {
+  userName: {
     fontSize: 18,
     fontWeight: "600",
-    marginBottom: 8,
+    marginLeft: 8,
   },
-  syncTime: {
-    fontSize: 14,
-    marginBottom: 16,
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
-  actionsSection: {
+  iconButton: {
+    marginLeft: 8,
+    padding: 4,
+    borderRadius: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 16,
+  },
+  bottomSectionRow: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    backgroundColor: "transparent",
     gap: 12,
   },
-  button: {
-    marginTop: 8,
+  bottomButton: {
+    flex: 2,
+  },
+  syncButton: {
+    flex: 1,
   },
 });
 

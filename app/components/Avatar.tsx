@@ -1,6 +1,5 @@
 import React from "react";
-import FastImage from "react-native-fast-image";
-import { StyleSheet, View, TouchableOpacity } from "react-native";
+import { StyleSheet, View, TouchableOpacity, Image } from "react-native";
 
 interface AvatarProps {
   uri: string | null;
@@ -27,16 +26,15 @@ const Avatar: React.FC<AvatarProps> = ({
       disabled={disabled}
       style={[styles.container, { width: size, height: size }, style]}
     >
-      <FastImage
+      <Image
         style={[
           styles.image,
           { width: size, height: size, borderRadius: size / 2 },
         ]}
         source={{
           uri: uri || placeholder,
-          priority: FastImage.priority.normal,
         }}
-        resizeMode={FastImage.resizeMode.cover}
+        resizeMode="cover"
         onError={() => {
           console.warn("Failed to load image:", imageUri);
         }}

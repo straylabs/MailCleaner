@@ -16,40 +16,20 @@ export default function RootNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator 
-        id={undefined} 
+      <Stack.Navigator
+        id={undefined}
         screenOptions={{
-          headerStyle: {
-            backgroundColor: theme.surface,
-          },
-          headerTintColor: theme.text,
-          headerTitleStyle: {
-            fontWeight: "600",
-          },
+          headerShown: false,
         }}
       >
         {authState.isAuthenticated ? (
           <>
-            <Stack.Screen 
-              name="Home" 
-              component={HomeScreen}
-              options={{ 
-                title: "MailCleaner",
-                headerShown: true,
-              }}
-            />
-            <Stack.Screen 
-              name="Presets" 
-              component={PresetsScreen}
-              options={{ 
-                title: "Presets",
-                headerShown: true,
-              }}
-            />
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="Presets" component={PresetsScreen} />
           </>
         ) : (
-          <Stack.Screen 
-            name="Login" 
+          <Stack.Screen
+            name="Login"
             component={LoginScreen}
             options={{ headerShown: false }}
           />
