@@ -1,7 +1,7 @@
 import { registerRootComponent } from "expo";
 import App from "./App";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
-import { Creds } from "Creds";
+import { Creds } from "./Creds";
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
 // It also ensures that whether you load the app in Expo Go or in a native build,
