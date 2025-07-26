@@ -44,7 +44,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
-      const token = userInfo.data?.idToken;
+      const token = userInfo.data?.idToken ?? null;
       const userName = userInfo.data.user.name ?? null;
       const userAvatar = userInfo.data.user.photo ?? null;
       StorageUtils.set(StorageKey.GOOGLE_TOKEN, token);
