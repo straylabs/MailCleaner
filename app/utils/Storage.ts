@@ -5,6 +5,7 @@ export const enum StorageKey {
   AUTH_STATE = "auth_state",
   APP_THEME = "app_theme",
   CURRENT_PRESET = "current_preset",
+  GOOGLE_TOKEN = "google_token",
 }
 
 // Initialize storage

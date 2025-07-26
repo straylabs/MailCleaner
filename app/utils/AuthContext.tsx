@@ -6,9 +6,12 @@ import React, {
   ReactNode,
 } from "react";
 import { StorageKey, StorageUtils } from "./Storage";
-
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 interface AuthState {
   isAuthenticated: boolean;
+  googleToken?: string | null;
+  userName?: string | null;
+  userAvatar?: string | null;
 }
 
 interface AuthContextType {
@@ -23,6 +26,9 @@ interface AuthProviderProps {
 
 const defaultAuthState: AuthState = {
   isAuthenticated: false,
+  googleToken: null,
+  userName: null,
+  userAvatar: null,
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,13 +39,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return storedState || defaultAuthState;
   });
 
-  const login = () => {
-    const newState: AuthState = { isAuthenticated: true };
-    setAuthState(newState);
-    StorageUtils.set(StorageKey.AUTH_STATE, newState);
+  // Google Sign-In logic
+  const login = async () => {
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      const token = userInfo.data?.idToken ?? null;
+      const userName = userInfo.data.user.name ?? null;
+      const userAvatar = userInfo.data.user.photo ?? null;
+      StorageUtils.set(StorageKey.GOOGLE_TOKEN, token);
+      const newState: AuthState = {
+        isAuthenticated: true,
+        googleToken: token,
+        userName,
+        userAvatar,
+      };
+      setAuthState(newState);
+      StorageUtils.set(StorageKey.AUTH_STATE, newState);
+    } catch (error) {
+      console.error("Google Sign-In error:", error);
+    }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await GoogleSignin.signOut();
+    } catch (error) {
+      // Ignore if not signed in
+    }
+    StorageUtils.delete(StorageKey.GOOGLE_TOKEN);
     setAuthState(defaultAuthState);
     StorageUtils.set(StorageKey.AUTH_STATE, defaultAuthState);
   };

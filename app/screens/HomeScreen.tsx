@@ -20,22 +20,19 @@ type HomeScreenProps = AppScreenProps<"Home">;
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const { theme, toggleTheme, isDarkMode } = useTheme();
-  const { logout } = useAuth();
+  const { logout, authState } = useAuth();
   const [showLogoutAlert, setShowLogoutAlert] = useState(false);
-  // Removed presetInput, now handled in PresetsScreen
 
   // Dummy user name and avatar
-  const userName = "John Doe";
-  const userAvatar = null;
 
   return (
     <Screen useSafeArea>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Avatar uri={userAvatar} size={40} />
+          <Avatar uri={authState.userAvatar} size={40} />
           <Text style={[styles.userName, { color: theme.text }]}>
-            {userName}
+            {authState.userName}
           </Text>
         </View>
         <View style={styles.headerRight}>
@@ -80,7 +77,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         style={{ flex: 1 }}
       >
-        {/* Empty for now */}
+        {/* Debug code removed: Displaying Google token */}
       </ScrollView>
 
       {/* Bottom actions */}
