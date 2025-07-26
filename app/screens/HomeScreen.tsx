@@ -23,17 +23,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const { logout, authState } = useAuth();
   const [showLogoutAlert, setShowLogoutAlert] = useState(false);
 
-  // Retrieve Google token from storage
-  const [googleToken, setGoogleToken] = useState<string | null>(null);
-  React.useEffect(() => {
-    // Dynamically import StorageUtils and StorageKey
-    (async () => {
-      const { StorageUtils, StorageKey } = await import("@/utils/Storage");
-      const token = StorageUtils.get<string>(StorageKey.GOOGLE_TOKEN);
-      setGoogleToken(token);
-    })();
-  }, []);
-
   // Dummy user name and avatar
 
   return (
