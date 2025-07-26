@@ -1,25 +1,21 @@
 import { ExpoConfig } from "expo/config";
 
 const config: ExpoConfig = {
-  name: "Straylabs",
-  slug: "boilerplate",
+  name: "CleanMyMails",
+  slug: "cleanmymails",
   version: "1.0.0",
   icon: "./branding/icon.png",
   newArchEnabled: true,
-  userInterfaceStyle:'automatic',
+  userInterfaceStyle: "automatic",
   android: {
-    package: "com.straylabs.boilerplate",
+    package: "com.straylabs.cleanmymails",
     versionCode: 1,
     edgeToEdgeEnabled: true,
   },
   ios: {
-    bundleIdentifier: "com.straylabs.boilerplate",
+    bundleIdentifier: "com.straylabs.cleanmymails",
     buildNumber: "1",
-    icon:{
-      light: "./branding/icon-light.png",
-      dark: "./branding/icon-dark.png",
-
-    }
+    icon: "./branding/icon.png",
   },
   web: {
     bundler: "metro",
