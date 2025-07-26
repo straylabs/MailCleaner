@@ -88,21 +88,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         style={{ flex: 1 }}
       >
-        {/* Show Google token for debug/demo */}
-        {googleToken && (
-          <View style={{ marginBottom: 16 }}>
-            <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-              Google Token:
-            </Text>
-            <Text
-              style={{ color: theme.text, fontSize: 12 }}
-              numberOfLines={2}
-              ellipsizeMode="middle"
-            >
-              {googleToken}
-            </Text>
-          </View>
-        )}
+        {/* Debug code removed: Displaying Google token */}
       </ScrollView>
 
       {/* Bottom actions */}
