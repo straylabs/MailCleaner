@@ -6,32 +6,308 @@ import Screen from "@/components/Screen";
 import { AppScreenProps } from "@/navigation/types";
 import { StorageUtils, StorageKey } from "@/utils/Storage";
 
-// Mock data for presets - this would typically come from a backend or local storage
-const mockPresets = [
+// Preset data structure
+export type Preset = {
+  id: string;
+  name: string;
+  description: string;
+  keywords: string[];
+  MINIMUM_MATCH_IN_SUBJECT: number;
+  MINIMUM_MATCHES_IN_BODY: number;
+};
+
+export const mockPresets: Preset[] = [
   {
-    id: "1",
-    name: "Delete Promotional Emails",
-    description: "Delete all emails from promotional senders.",
+    id: "promotional",
+    name: "🛍️ Promotional",
+    description:
+      "Filter and delete promotional offers, deals, and marketing emails.",
+    keywords: [
+      "sale",
+      "discount",
+      "deal",
+      "promo",
+      "limited time",
+      "special offer",
+      "bestseller",
+      "coupon",
+      "clearance",
+      "exclusive",
+      "flash sale",
+      "save big",
+      "bundle",
+      "subscribe",
+      "register now",
+      "buy now",
+      "bonus",
+      "lowest price",
+      "free shipping",
+      "gift card",
+    ],
+    MINIMUM_MATCH_IN_SUBJECT: 1,
+    MINIMUM_MATCHES_IN_BODY: 2,
   },
   {
-    id: "2",
-    name: "Delete Newsletter Emails",
-    description: "Delete all newsletter subscription emails.",
+    id: "social_media",
+    name: "📘 Social Media",
+    description:
+      "Filter and delete social media notifications, updates, and messages.",
+    keywords: [
+      "Facebook",
+      "Twitter",
+      "Instagram",
+      "LinkedIn",
+      "Snapchat",
+      "TikTok",
+      "Swiggy",
+      "Zomato",
+      "Reddit",
+      "Pinterest",
+      "YouTube",
+      "WhatsApp",
+      "Telegram",
+      "Discord",
+      "Jio",
+      "Spotify",
+      "Uber",
+      "Snapdeal",
+      "HDFC",
+      "ICICI",
+      "Axis Bank",
+      "Paytm",
+      "Amazon",
+      "Flipkart",
+      "Myntra",
+      "BookMyShow",
+      "Ola",
+      "Blinkit",
+      "Zepto",
+      "Instamart",
+    ],
+    MINIMUM_MATCH_IN_SUBJECT: 1,
+    MINIMUM_MATCHES_IN_BODY: 1,
   },
   {
-    id: "3",
-    name: "Delete Social Updates",
-    description: "Delete emails from social networks and updates.",
+    id: "likely_spam",
+    name: "🚫 Likely Spam",
+    description: "Auto-delete spammy and suspicious emails.",
+    keywords: [
+      "win",
+      "prize",
+      "lottery",
+      "claim now",
+      "urgent",
+      "risk free",
+      "guaranteed",
+      "click here",
+      "unsubscribe",
+      "selected",
+      "money",
+      "miracle",
+      "easy income",
+      "no cost",
+      "get rich",
+      "act now",
+      "confidential",
+      "final notice",
+      "urgent response",
+      "investment scheme",
+      "100% safe",
+      "work from home",
+      "you've been selected",
+    ],
+    MINIMUM_MATCH_IN_SUBJECT: 1,
+    MINIMUM_MATCHES_IN_BODY: 3,
   },
   {
-    id: "4",
-    name: "Delete Spam Emails",
-    description: "Delete all emails marked as spam.",
+    id: "temporary_otp",
+    name: "🔐 OTP & Security",
+    description:
+      "Delete temporary login OTP and authentication-related emails.",
+    keywords: [
+      "otp",
+      "verification code",
+      "one time password",
+      "login attempt",
+      "security code",
+      "PIN",
+      "auth code",
+      "access code",
+      "password reset",
+      "device login",
+      "new device",
+      "2FA",
+      "multi-factor",
+      "login alert",
+      "temporary code",
+      "expires in",
+      "valid for",
+      "do not share",
+      "session code",
+      "identity verification",
+    ],
+    MINIMUM_MATCH_IN_SUBJECT: 1,
+    MINIMUM_MATCHES_IN_BODY: 2,
   },
   {
-    id: "5",
-    name: "Delete Old Emails",
-    description: "Delete emails older than 6 months.",
+    id: "job_alerts",
+    name: "💼 Job Alerts",
+    description:
+      "Clear job listings, recruitment emails and career site updates.",
+    keywords: [
+      "job",
+      "career",
+      "apply now",
+      "interview",
+      "resume",
+      "CV",
+      "hiring",
+      "vacancy",
+      "recruitment",
+      "opportunity",
+      "job match",
+      "placement",
+      "walk-in",
+      "HR",
+      "Shine",
+      "Naukri",
+      "LinkedIn",
+      "Talent Acquisition",
+      "Confidential Careers",
+      "opening",
+      "recruiter",
+    ],
+    MINIMUM_MATCH_IN_SUBJECT: 1,
+    MINIMUM_MATCHES_IN_BODY: 2,
+  },
+  {
+    id: "ai_news",
+    name: "🤖 AI & Tech News",
+    description: "Auto-remove AI and tech newsletters or digest emails.",
+    keywords: [
+      "ChatGPT",
+      "AI update",
+      "machine learning",
+      "data science",
+      "newsletter",
+      "Generative AI",
+      "AI trends",
+      "neural network",
+      "deep learning",
+      "AI project",
+      "AI course",
+      "automation",
+      "robotics",
+      "Serverless",
+      "WebRTC",
+      "TWIML",
+      "AI jobs",
+      "ML",
+      "tech news",
+      "AI research",
+      "NLP",
+      "vision",
+      "Voice AI",
+      "Deep Dive",
+      "Tech Talent",
+    ],
+    MINIMUM_MATCH_IN_SUBJECT: 1,
+    MINIMUM_MATCHES_IN_BODY: 2,
+  },
+  {
+    id: "finance_reports",
+    name: "📊 Finance & Reports",
+    description:
+      "Remove emails about financial statements, reports, and stock alerts.",
+    keywords: [
+      "NSDL",
+      "dividend",
+      "annual report",
+      "quarterly earnings",
+      "portfolio update",
+      "financial report",
+      "investment",
+      "NSE",
+      "BSE",
+      "market summary",
+      "IPO",
+      "tax",
+      "audit",
+      "balance sheet",
+      "mutual fund",
+      "shareholder",
+      "profit",
+      "loss",
+      "expense",
+      "income",
+      "cash flow",
+      "trading alert",
+      "IndusInd Bank",
+      "CBSSBI ALERT",
+    ],
+    MINIMUM_MATCH_IN_SUBJECT: 1,
+    MINIMUM_MATCHES_IN_BODY: 2,
+  },
+  {
+    id: "personal_connects",
+    name: "👥 Personal Connects",
+    description: "Remove networking or cold-contact emails.",
+    keywords: [
+      "I want to connect",
+      "friend request",
+      "just messaged you",
+      "invitation",
+      "connect with me",
+      "LinkedIn",
+      "network",
+      "contact me",
+      "reach out",
+      "hello",
+      "catch up",
+      "personal note",
+      "private message",
+      "DM",
+      "chat",
+      "inbox",
+      "message",
+      "reply back",
+      "follow up",
+      "conversation",
+    ],
+    MINIMUM_MATCH_IN_SUBJECT: 1,
+    MINIMUM_MATCHES_IN_BODY: 2,
+  },
+  {
+    id: "miscellaneous",
+    name: "🧺 Miscellaneous",
+    description: "Filter random updates, newsletters, and event notifications.",
+    keywords: [
+      "reminder",
+      "update",
+      "digest",
+      "alert",
+      "schedule",
+      "calendar",
+      "event",
+      "info",
+      "summary",
+      "notification",
+      "invite",
+      "misc",
+      "general",
+      "random",
+      "FYI",
+      "announcement",
+      "reference",
+      "various",
+      "cloudxlab",
+      "Shanti Gold",
+      "WELTEC",
+      "lotus IPO",
+      "Lote ne wapas",
+    ],
+    MINIMUM_MATCH_IN_SUBJECT: 1,
+    MINIMUM_MATCHES_IN_BODY: 2,
   },
 ];
 
@@ -42,7 +318,7 @@ const PresetsScreen: React.FC<PresetsScreenProps> = ({ navigation }) => {
   const [selectedPresetId, setSelectedPresetId] = React.useState<string | null>(
     null
   );
-  const [presets, setPresets] = React.useState<typeof mockPresets>(mockPresets);
+  const [presets, setPresets] = React.useState<Preset[]>(mockPresets);
   const [presetInput, setPresetInput] = React.useState("");
   const handleSelectPreset = (presetId: string) => {
     setSelectedPresetId(presetId);
@@ -51,10 +327,13 @@ const PresetsScreen: React.FC<PresetsScreenProps> = ({ navigation }) => {
 
   const handleAddPreset = () => {
     if (!presetInput.trim()) return;
-    const newPreset = {
-      id: (presets.length + 1).toString(),
+    const newPreset: Preset = {
+      id: presetInput.trim().toLowerCase().replace(/\s+/g, "_"),
       name: presetInput.trim(),
       description: "Custom preset",
+      keywords: [],
+      MINIMUM_MATCH_IN_SUBJECT: 1,
+      MINIMUM_MATCHES_IN_BODY: 1,
     };
     setPresets([...presets, newPreset]);
     setPresetInput("");
@@ -103,25 +382,6 @@ const PresetsScreen: React.FC<PresetsScreenProps> = ({ navigation }) => {
           style={styles.list}
           showsVerticalScrollIndicator={false}
         />
-        <View style={styles.addPresetSection}>
-          <TextInput
-            style={[
-              styles.input,
-              { color: theme.text, borderColor: theme.border },
-            ]}
-            placeholder="Create a new preset..."
-            placeholderTextColor={theme.textSecondary}
-            value={presetInput}
-            onChangeText={setPresetInput}
-          />
-          <Button
-            variant="primary"
-            style={styles.addButton}
-            onPress={handleAddPreset}
-          >
-            Add Preset
-          </Button>
-        </View>
       </View>
     </Screen>
   );

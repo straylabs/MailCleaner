@@ -4,21 +4,39 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  TextInput,
 } from "react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTheme } from "@/utils/ThemeContext";
-import Button from "@/components/Button";
 import Screen from "@/components/Screen";
+import { StorageUtils, StorageKey } from "@/utils/Storage";
+import { Preset, mockPresets } from "@/screens/PresetsScreen";
 import { useAuth } from "@/utils/AuthContext";
-import { AppScreenProps } from "@/navigation/types";
 import Avatar from "@/components/Avatar";
 import CustomAlert from "@/components/CustomAlert";
-import { Sun, Moon, LogOut } from "lucide-react-native";
+import { Sun, Moon, LogOut, Trash2 } from "lucide-react-native";
+import { AppScreenProps } from "@/navigation/types";
+import Button from "@/components/Button";
 
 type HomeScreenProps = AppScreenProps<"Home">;
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
+  const [deletedMailLog, setDeletedMailLog] = useState<string[]>([]);
+  const scrollViewRef = React.useRef<ScrollView>(null);
+  const [isAtEnd, setIsAtEnd] = useState(true);
+  const [currentPresetId, setCurrentPresetId] = useState<string | null>(
+    StorageUtils.get<string>(StorageKey.CURRENT_PRESET)
+  );
+  const [currentPreset, setCurrentPreset] = useState<Preset | null>(null);
+
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      const storedPresetId = StorageUtils.get<string>(
+        StorageKey.CURRENT_PRESET
+      );
+      setCurrentPresetId(storedPresetId);
+    });
+    return unsubscribe;
+  }, [navigation]);
   const { theme, toggleTheme, isDarkMode } = useTheme();
   const { logout, authState } = useAuth();
   const [showLogoutAlert, setShowLogoutAlert] = useState(false);
@@ -26,8 +44,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [syncProgress, setSyncProgress] = useState(0);
   const cancelSyncRef = React.useRef(false);
 
-  // --- Gmail API helpers ---
-  // Get a batch of Gmail messages
   async function getGmailMessages(token, pageToken) {
     const baseUrl = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
     let url = baseUrl + `?maxResults=10`;
@@ -50,8 +66,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     };
   }
 
-  // Parse a Gmail message (fetch full details)
-  async function parseGmailMessage(msg, token) {
+  async function parseGmailMessage(msg, token, preset: Preset | null) {
     const url = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`;
     const res = await fetch(url, {
       headers: {
@@ -60,20 +75,85 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     });
     if (!res.ok) throw new Error("Failed to fetch Gmail message details");
     const data = await res.json();
-    // Extract subject from headers
     let subject = "";
+    let body = "";
     if (data.payload && data.payload.headers) {
       const subjectHeader = data.payload.headers.find(
         (h) => h.name.toLowerCase() === "subject"
       );
       if (subjectHeader) subject = subjectHeader.value;
     }
-    console.log("Email subject:", subject);
-    await new Promise((r) => setTimeout(r, 200)); // Simulate processing
+    if (data.payload && data.payload.parts) {
+      for (const part of data.payload.parts) {
+        if (part.mimeType === "text/plain" && part.body && part.body.data) {
+          body += decodeURIComponent(
+            escape(
+              window.atob(part.body.data.replace(/-/g, "+").replace(/_/g, "/"))
+            )
+          );
+        }
+      }
+    } else if (data.payload && data.payload.body && data.payload.body.data) {
+      body += decodeURIComponent(
+        escape(
+          window.atob(
+            data.payload.body.data.replace(/-/g, "+").replace(/_/g, "/")
+          )
+        )
+      );
+    }
+
+    let shouldDelete = false;
+    if (preset) {
+      const subjectMatches = preset.keywords.filter((kw) =>
+        subject.toLowerCase().includes(kw.toLowerCase())
+      ).length;
+      if (subjectMatches >= preset.MINIMUM_MATCH_IN_SUBJECT) {
+        const bodyMatches = preset.keywords.filter((kw) =>
+          body.toLowerCase().includes(kw.toLowerCase())
+        ).length;
+        if (bodyMatches >= preset.MINIMUM_MATCHES_IN_BODY) {
+          shouldDelete = true;
+        }
+      }
+    }
+    if (shouldDelete) {
+      await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}/trash`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      setDeletedMailLog((prev) => {
+        // If user is at end, scroll after update
+        if (isAtEnd && scrollViewRef.current) {
+          setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }
+        return [...prev, subject];
+      });
+      console.log(`Deleted mail: ${subject}`);
+    } else {
+      console.log("Email subject:", subject);
+    }
+    // await new Promise((r) => setTimeout(r, 50));
     return data;
   }
 
-  const COOLDOWN_MS = 30;
+  const COOLDOWN_MS = 10;
 
   async function syncGmailMessages(token) {
     let nextPageToken = undefined;
@@ -82,10 +162,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setSyncProgress(0);
     cancelSyncRef.current = false;
     let cancelled = false;
+    const preset = mockPresets.find((p) => p.id === currentPresetId) || null;
+    if (!preset) {
+      setSyncing(false);
+      return;
+    }
     try {
+      let shouldBreak = false;
       do {
         if (cancelSyncRef.current) {
           cancelled = true;
+          shouldBreak = true;
           break;
         }
         const { messages, nextPageToken: newToken } = await getGmailMessages(
@@ -95,16 +182,26 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         for (const msg of messages) {
           if (cancelSyncRef.current) {
             cancelled = true;
+            shouldBreak = true;
             break;
           }
-          await parseGmailMessage(msg, token);
+          await parseGmailMessage(msg, token, preset);
           totalParsed++;
           setSyncProgress(totalParsed);
-          await new Promise((r) => setTimeout(r, COOLDOWN_MS));
+          if (cancelSyncRef.current) {
+            cancelled = true;
+            shouldBreak = true;
+            break;
+          }
+          // await new Promise((r) => setTimeout(r, COOLDOWN_MS));
         }
+        if (shouldBreak) break;
         nextPageToken = newToken;
-        // Optional: cooldown between batches
-        await new Promise((r) => setTimeout(r, COOLDOWN_MS));
+        if (cancelSyncRef.current) {
+          cancelled = true;
+          break;
+        }
+        // await new Promise((r) => setTimeout(r, COOLDOWN_MS));
       } while (nextPageToken && !cancelSyncRef.current);
     } catch (err) {
       console.error("Sync error:", err);
@@ -119,6 +216,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     if (syncing) return;
     cancelSyncRef.current = false;
     const token = authState.accessToken;
+    console.log("Starting Gmail sync with token:", token);
     await syncGmailMessages(token);
   };
 
@@ -127,9 +225,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setSyncing(false);
   };
 
+  const selectedPreset =
+    mockPresets.find((p) => p.id === currentPresetId) || null;
+
   return (
     <Screen useSafeArea>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Avatar uri={authState.userAvatar} size={40} />
@@ -154,7 +254,23 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         </View>
       </View>
 
-      {/* CustomAlert for logout */}
+      <View style={styles.presetInfoContainer}>
+        {selectedPreset ? (
+          <>
+            <Text style={[styles.presetTitle, { color: theme.text }]}>
+              Preset: {selectedPreset.name}
+            </Text>
+            <Text style={[styles.presetDesc, { color: theme.textSecondary }]}>
+              {selectedPreset.description}
+            </Text>
+          </>
+        ) : (
+          <Text style={[styles.presetTitle, { color: theme.textSecondary }]}>
+            No preset selected
+          </Text>
+        )}
+      </View>
+
       <CustomAlert
         visible={showLogoutAlert}
         title="Logout"
@@ -176,10 +292,46 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
       {/* Main scrollable area */}
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={styles.scrollContent}
         style={{ flex: 1 }}
+        onScroll={(e) => {
+          const { layoutMeasurement, contentOffset, contentSize } =
+            e.nativeEvent;
+          // If user is within 30px of the end, consider at end
+          setIsAtEnd(
+            layoutMeasurement.height + contentOffset.y >=
+              contentSize.height - 30
+          );
+        }}
+        scrollEventThrottle={32}
       >
-        {/* Debug code removed: Displaying Google token */}
+        {/* Deleted mail log */}
+        {deletedMailLog.length > 0 && (
+          <View style={styles.deletedLogContainer}>
+            <Text style={[styles.deletedLogTitle, { color: theme.text }]}>
+              Deleted Mails ({deletedMailLog.length})
+            </Text>
+            {deletedMailLog.map((subject, idx) => (
+              <View key={idx} style={styles.deletedLogItemRow}>
+                <Trash2
+                  size={18}
+                  color={theme.error || "#d32f2f"}
+                  style={{ marginRight: 8 }}
+                />
+                <Text
+                  style={[
+                    styles.deletedLogItemSubject,
+                    { color: theme.textSecondary },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {subject}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       {/* Bottom actions */}
@@ -195,7 +347,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           variant="primary"
           style={styles.syncButton}
           onPress={handleStartSync}
-          disabled={syncing}
+          disabled={syncing || !currentPresetId}
         >
           {syncing ? `Syncing... (${syncProgress})` : "Start Sync"}
         </Button>
@@ -214,6 +366,51 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  deletedLogContainer: {
+    marginBottom: 16,
+    padding: 10,
+    backgroundColor: "rgba(220,38,38,0.08)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(220,38,38,0.18)",
+    shadowColor: "#d32f2f",
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  deletedLogTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    marginBottom: 10,
+    letterSpacing: 0.2,
+  },
+  deletedLogItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    paddingVertical: 4,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "rgba(220,38,38,0.12)",
+  },
+  deletedLogItemSubject: {
+    fontSize: 15,
+    fontWeight: "500",
+    flex: 1,
+  },
+  presetInfoContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    paddingTop: 4,
+  },
+  presetTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  presetDesc: {
+    fontSize: 14,
+    marginBottom: 2,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
