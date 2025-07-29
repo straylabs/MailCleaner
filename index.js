@@ -14,10 +14,9 @@ GoogleSignin.configure({
     "https://www.googleapis.com/auth/gmail.modify",
   ],
   // webClientId: "366498185361-0ip5o0mi3nkmb0t2s049gkr4esodkca6.apps.googleusercontent.com",
-  webClientId:
-   Creds.GOOGLE_WEB_CLIENT_ID,
-  iosClientId:
-    Creds.GOOGLE_IOS_CLIENT_ID,
+  webClientId: Creds.GOOGLE_WEB_CLIENT_ID,
+  iosClientId: Creds.GOOGLE_IOS_CLIENT_ID,
+  forceCodeForRefreshToken: true,
 });
 
 registerRootComponent(App);
