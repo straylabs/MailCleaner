@@ -9,7 +9,8 @@ import { StorageKey, StorageUtils } from "./Storage";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 interface AuthState {
   isAuthenticated: boolean;
-  googleToken?: string | null;
+  accessToken?: string | null;
+  idToken?: string | null;
   userName?: string | null;
   userAvatar?: string | null;
 }
@@ -26,7 +27,8 @@ interface AuthProviderProps {
 
 const defaultAuthState: AuthState = {
   isAuthenticated: false,
-  googleToken: null,
+  accessToken: null,
+  idToken: null,
   userName: null,
   userAvatar: null,
 };
@@ -44,18 +46,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
-      const token = userInfo.data?.idToken ?? null;
-      const userName = userInfo.data.user.name ?? null;
-      const userAvatar = userInfo.data.user.photo ?? null;
-      StorageUtils.set(StorageKey.GOOGLE_TOKEN, token);
-      const newState: AuthState = {
+      const tokens = await GoogleSignin.getTokens(); // { accessToken, idToken }
+      const accessToken = tokens.accessToken ?? null;
+      const idToken = tokens.idToken ?? null;
+      // Try userInfo.name and userInfo.photo (based on docs)
+      const userName = userInfo?.data.user?.name ?? null;
+      const userAvatar = userInfo?.data.user?.photo ?? null;
+      StorageUtils.set(StorageKey.GOOGLE_TOKEN, { accessToken, idToken });
+      StorageUtils.set(StorageKey.AUTH_STATE, {
         isAuthenticated: true,
-        googleToken: token,
+        accessToken,
+        idToken,
         userName,
         userAvatar,
-      };
-      setAuthState(newState);
-      StorageUtils.set(StorageKey.AUTH_STATE, newState);
+      });
+      setAuthState({
+        isAuthenticated: true,
+        accessToken,
+        idToken,
+        userName,
+        userAvatar,
+      });
     } catch (error) {
       console.error("Google Sign-In error:", error);
     }

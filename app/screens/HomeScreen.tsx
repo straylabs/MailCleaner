@@ -22,8 +22,110 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const { theme, toggleTheme, isDarkMode } = useTheme();
   const { logout, authState } = useAuth();
   const [showLogoutAlert, setShowLogoutAlert] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
+  const cancelSyncRef = React.useRef(false);
 
-  // Dummy user name and avatar
+  // --- Gmail API helpers ---
+  // Get a batch of Gmail messages
+  async function getGmailMessages(token, pageToken) {
+    const baseUrl = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
+    let url = baseUrl + `?maxResults=10`;
+    if (pageToken) url += `&pageToken=${pageToken}`;
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error("Gmail fetch error:", res.status, errorText);
+      console.error("Token used:", token);
+      throw new Error("Failed to fetch Gmail messages");
+    }
+    const data = await res.json();
+    return {
+      messages: data.messages || [],
+      nextPageToken: data.nextPageToken,
+    };
+  }
+
+  // Parse a Gmail message (fetch full details)
+  async function parseGmailMessage(msg, token) {
+    const url = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`;
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) throw new Error("Failed to fetch Gmail message details");
+    const data = await res.json();
+    // Extract subject from headers
+    let subject = "";
+    if (data.payload && data.payload.headers) {
+      const subjectHeader = data.payload.headers.find(
+        (h) => h.name.toLowerCase() === "subject"
+      );
+      if (subjectHeader) subject = subjectHeader.value;
+    }
+    console.log("Email subject:", subject);
+    await new Promise((r) => setTimeout(r, 200)); // Simulate processing
+    return data;
+  }
+
+  const COOLDOWN_MS = 30;
+
+  async function syncGmailMessages(token) {
+    let nextPageToken = undefined;
+    let totalParsed = 0;
+    setSyncing(true);
+    setSyncProgress(0);
+    cancelSyncRef.current = false;
+    let cancelled = false;
+    try {
+      do {
+        if (cancelSyncRef.current) {
+          cancelled = true;
+          break;
+        }
+        const { messages, nextPageToken: newToken } = await getGmailMessages(
+          token,
+          nextPageToken
+        );
+        for (const msg of messages) {
+          if (cancelSyncRef.current) {
+            cancelled = true;
+            break;
+          }
+          await parseGmailMessage(msg, token);
+          totalParsed++;
+          setSyncProgress(totalParsed);
+          await new Promise((r) => setTimeout(r, COOLDOWN_MS));
+        }
+        nextPageToken = newToken;
+        // Optional: cooldown between batches
+        await new Promise((r) => setTimeout(r, COOLDOWN_MS));
+      } while (nextPageToken && !cancelSyncRef.current);
+    } catch (err) {
+      console.error("Sync error:", err);
+    }
+    setSyncing(false);
+    if (cancelled) {
+      console.log("Sync cancelled by user.");
+    }
+  }
+
+  const handleStartSync = async () => {
+    if (syncing) return;
+    cancelSyncRef.current = false;
+    const token = authState.accessToken;
+    await syncGmailMessages(token);
+  };
+
+  const handleCancelSync = () => {
+    cancelSyncRef.current = true;
+    setSyncing(false);
+  };
 
   return (
     <Screen useSafeArea>
@@ -92,13 +194,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         <Button
           variant="primary"
           style={styles.syncButton}
-          onPress={() => {
-            // Start sync logic here
-            console.log("Start sync pressed");
-          }}
+          onPress={handleStartSync}
+          disabled={syncing}
         >
-          Start Sync
+          {syncing ? `Syncing... (${syncProgress})` : "Start Sync"}
         </Button>
+        {syncing && (
+          <Button
+            variant="destructive"
+            style={styles.syncButton}
+            onPress={handleCancelSync}
+          >
+            Cancel
+          </Button>
+        )}
       </View>
     </Screen>
   );
