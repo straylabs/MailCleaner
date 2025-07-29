@@ -6,6 +6,7 @@ export type RootStackParamList = {
   Login: undefined;
   Home: undefined;
   Presets: undefined;
+  CreatePreset: { editPresetId?: string };
 };
 
 /**

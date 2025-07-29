@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { RootStackParamList } from "./types";
 import HomeScreen from "@/screens/HomeScreen";
 import PresetsScreen from "@/screens/PresetsScreen";
+import CreatePresetScreen from "@/screens/CreatePresetScreen";
 import LoginScreen from "@/screens/LoginScreen";
 import { useTheme } from "@/utils/ThemeContext";
 import { useAuth } from "@/utils/AuthContext";
@@ -26,6 +27,7 @@ export default function RootNavigator() {
           <>
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="Presets" component={PresetsScreen} />
+            <Stack.Screen name="CreatePreset" component={CreatePresetScreen} />
           </>
         ) : (
           <Stack.Screen

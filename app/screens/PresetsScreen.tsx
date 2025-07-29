@@ -1,10 +1,19 @@
 import React from "react";
-import { View, Text, StyleSheet, FlatList, TextInput } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TextInput,
+  Alert,
+} from "react-native";
 import { useTheme } from "@/utils/ThemeContext";
 import Button from "@/components/Button";
 import Screen from "@/components/Screen";
 import { AppScreenProps } from "@/navigation/types";
 import { StorageUtils, StorageKey } from "@/utils/Storage";
+import { useFocusEffect } from "@react-navigation/native";
+import { PresetUtils } from "@/utils/PresetUtils";
 
 // Preset data structure
 export type Preset = {
@@ -318,29 +327,102 @@ const PresetsScreen: React.FC<PresetsScreenProps> = ({ navigation }) => {
   const [selectedPresetId, setSelectedPresetId] = React.useState<string | null>(
     null
   );
-  const [presets, setPresets] = React.useState<Preset[]>(mockPresets);
+  const [presets, setPresets] = React.useState<Preset[]>([]);
   const [presetInput, setPresetInput] = React.useState("");
+
+  // Load presets (both default and custom)
+  const loadPresets = React.useCallback(() => {
+    const allPresets = PresetUtils.getAllPresets();
+    setPresets(allPresets);
+
+    // Load selected preset
+    const currentPresetId = StorageUtils.get<string>(StorageKey.CURRENT_PRESET);
+    if (currentPresetId) {
+      setSelectedPresetId(currentPresetId);
+    }
+  }, []);
+
+  // Reload presets when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadPresets();
+    }, [loadPresets])
+  );
+
   const handleSelectPreset = (presetId: string) => {
     setSelectedPresetId(presetId);
-    StorageUtils.set(StorageKey.CURRENT_PRESET, presetId);
+    PresetUtils.setCurrentPreset(presetId);
+  };
+
+  const handleCreatePreset = () => {
+    navigation.navigate("CreatePreset");
+  };
+
+  const handleEditPreset = (presetId: string) => {
+    navigation.navigate("CreatePreset", { editPresetId: presetId });
+  };
+
+  const handleDeletePreset = (presetId: string, presetName: string) => {
+    Alert.alert(
+      "Delete Preset",
+      `Are you sure you want to delete "${presetName}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            const success = PresetUtils.deleteCustomPreset(presetId);
+            if (success) {
+              loadPresets();
+              // Clear selection if deleted preset was selected
+              if (selectedPresetId === presetId) {
+                setSelectedPresetId(null);
+              }
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleLongPressPreset = (preset: Preset) => {
+    if (!PresetUtils.isCustomPreset(preset.id)) return;
+
+    Alert.alert(preset.name, "What would you like to do?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Edit",
+        onPress: () => handleEditPreset(preset.id),
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => handleDeletePreset(preset.id, preset.name),
+      },
+    ]);
   };
 
   const handleAddPreset = () => {
     if (!presetInput.trim()) return;
     const newPreset: Preset = {
-      id: presetInput.trim().toLowerCase().replace(/\s+/g, "_"),
+      id: `quick_${Date.now()}`,
       name: presetInput.trim(),
-      description: "Custom preset",
+      description: "Quick custom preset",
       keywords: [],
       MINIMUM_MATCH_IN_SUBJECT: 1,
       MINIMUM_MATCHES_IN_BODY: 1,
     };
-    setPresets([...presets, newPreset]);
+
+    PresetUtils.saveCustomPreset(newPreset);
+    loadPresets();
     setPresetInput("");
   };
 
   const renderPresetItem = ({ item }: { item: (typeof mockPresets)[0] }) => {
     const isSelected = item.id === selectedPresetId;
+    const isCustom = PresetUtils.isCustomPreset(item.id);
+
     return (
       <Button
         variant={isSelected ? "primary" : "outline"}
@@ -349,16 +431,38 @@ const PresetsScreen: React.FC<PresetsScreenProps> = ({ navigation }) => {
           isSelected && { borderColor: theme.primary },
         ]}
         onPress={() => handleSelectPreset(item.id)}
+        onLongPress={() => handleLongPressPreset(item)}
       >
-        <View>
-          <Text style={[styles.presetName, { color: theme.text }]}>
-            {item.name}
-          </Text>
+        <View style={styles.presetContent}>
+          <View style={styles.presetHeader}>
+            <Text style={[styles.presetName, { color: theme.text }]}>
+              {item.name}
+            </Text>
+            {isCustom && (
+              <View
+                style={[styles.customBadge, { backgroundColor: theme.accent }]}
+              >
+                <Text style={styles.customBadgeText}>Custom</Text>
+              </View>
+            )}
+          </View>
           <Text
             style={[styles.presetDescription, { color: theme.textSecondary }]}
           >
             {item.description}
           </Text>
+          {item.keywords.length > 0 && (
+            <Text style={[styles.keywordCount, { color: theme.textSecondary }]}>
+              {item.keywords.length} keywords
+            </Text>
+          )}
+          {isCustom && (
+            <Text
+              style={[styles.longPressHint, { color: theme.textSecondary }]}
+            >
+              Long press to edit or delete
+            </Text>
+          )}
         </View>
       </Button>
     );
@@ -374,6 +478,13 @@ const PresetsScreen: React.FC<PresetsScreenProps> = ({ navigation }) => {
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             Select a preset to use for cleaning your emails.
           </Text>
+          <Button
+            variant="primary"
+            style={styles.createButton}
+            onPress={handleCreatePreset}
+          >
+            <Text style={styles.createButtonText}>+ Create Custom Preset</Text>
+          </Button>
         </View>
         <FlatList
           data={presets}
@@ -428,20 +539,60 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "center",
   },
+  presetContent: {
+    width: "100%",
+  },
+  presetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
   presetName: {
     fontSize: 18,
     fontWeight: "600",
-    marginBottom: 4,
+    flex: 1,
+  },
+  customBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  customBadgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
   },
   presetDescription: {
     fontSize: 14,
-    marginBottom: 0,
+    marginBottom: 4,
+  },
+  keywordCount: {
+    fontSize: 12,
+    fontStyle: "italic",
+  },
+  longPressHint: {
+    fontSize: 11,
+    fontStyle: "italic",
+    marginTop: 2,
+    opacity: 0.7,
   },
   actionButton: {
     flex: 1,
   },
   addButton: {
     marginTop: 16,
+  },
+  createButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+  },
+  createButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
   },
 });
 

@@ -9,7 +9,8 @@ import React, { useEffect, useState } from "react";
 import { useTheme } from "@/utils/ThemeContext";
 import Screen from "@/components/Screen";
 import { StorageUtils, StorageKey } from "@/utils/Storage";
-import { Preset, mockPresets } from "@/screens/PresetsScreen";
+import { Preset } from "@/screens/PresetsScreen";
+import { PresetUtils } from "@/utils/PresetUtils";
 import { useAuth } from "@/utils/AuthContext";
 import Avatar from "@/components/Avatar";
 import CustomAlert from "@/components/CustomAlert";
@@ -23,20 +24,25 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [deletedMailLog, setDeletedMailLog] = useState<string[]>([]);
   const scrollViewRef = React.useRef<ScrollView>(null);
   const [isAtEnd, setIsAtEnd] = useState(true);
-  const [currentPresetId, setCurrentPresetId] = useState<string | null>(
-    StorageUtils.get<string>(StorageKey.CURRENT_PRESET)
-  );
   const [currentPreset, setCurrentPreset] = useState<Preset | null>(null);
+
+  // Load current preset when component mounts or when navigation focuses
+  const loadCurrentPreset = React.useCallback(() => {
+    const preset = PresetUtils.getCurrentPreset();
+    setCurrentPreset(preset);
+  }, []);
 
   React.useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
-      const storedPresetId = StorageUtils.get<string>(
-        StorageKey.CURRENT_PRESET
-      );
-      setCurrentPresetId(storedPresetId);
+      loadCurrentPreset();
     });
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, loadCurrentPreset]);
+
+  // Load preset on initial mount
+  React.useEffect(() => {
+    loadCurrentPreset();
+  }, [loadCurrentPreset]);
   const { theme, toggleTheme, isDarkMode } = useTheme();
   const { logout, authState } = useAuth();
   const [showLogoutAlert, setShowLogoutAlert] = useState(false);
@@ -105,17 +111,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
     let shouldDelete = false;
     if (preset) {
-      const subjectMatches = preset.keywords.filter((kw) =>
-        subject.toLowerCase().includes(kw.toLowerCase())
-      ).length;
-      if (subjectMatches >= preset.MINIMUM_MATCH_IN_SUBJECT) {
-        const bodyMatches = preset.keywords.filter((kw) =>
-          body.toLowerCase().includes(kw.toLowerCase())
-        ).length;
-        if (bodyMatches >= preset.MINIMUM_MATCHES_IN_BODY) {
-          shouldDelete = true;
-        }
-      }
+      // Use PresetUtils to check if email matches preset criteria
+      shouldDelete = PresetUtils.doesEmailMatchPreset(subject, body, preset);
     }
     if (shouldDelete) {
       await fetch(
@@ -162,8 +159,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setSyncProgress(0);
     cancelSyncRef.current = false;
     let cancelled = false;
-    const preset = mockPresets.find((p) => p.id === currentPresetId) || null;
-    if (!preset) {
+    
+    // Use the current preset from state
+    if (!currentPreset) {
       setSyncing(false);
       return;
     }
@@ -185,7 +183,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             shouldBreak = true;
             break;
           }
-          await parseGmailMessage(msg, token, preset);
+          await parseGmailMessage(msg, token, currentPreset);
           totalParsed++;
           setSyncProgress(totalParsed);
           if (cancelSyncRef.current) {
@@ -225,8 +223,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setSyncing(false);
   };
 
-  const selectedPreset =
-    mockPresets.find((p) => p.id === currentPresetId) || null;
+  // selectedPreset is now just currentPreset
+  const selectedPreset = currentPreset;
 
   return (
     <Screen useSafeArea>
@@ -263,11 +261,19 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <Text style={[styles.presetDesc, { color: theme.textSecondary }]}>
               {selectedPreset.description}
             </Text>
+            <Text style={[styles.presetSummary, { color: theme.textSecondary }]}>
+              {PresetUtils.getPresetSummary(selectedPreset)}
+            </Text>
           </>
         ) : (
-          <Text style={[styles.presetTitle, { color: theme.textSecondary }]}>
-            No preset selected
-          </Text>
+          <>
+            <Text style={[styles.presetTitle, { color: theme.textSecondary }]}>
+              No preset selected
+            </Text>
+            <Text style={[styles.presetDesc, { color: theme.textSecondary }]}>
+              Please select a preset to start cleaning emails
+            </Text>
+          </>
         )}
       </View>
 
@@ -347,7 +353,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           variant="primary"
           style={styles.syncButton}
           onPress={handleStartSync}
-          disabled={syncing || !currentPresetId}
+          disabled={syncing || !currentPreset}
         >
           {syncing ? `Syncing... (${syncProgress})` : "Start Sync"}
         </Button>
@@ -410,6 +416,11 @@ const styles = StyleSheet.create({
   presetDesc: {
     fontSize: 14,
     marginBottom: 2,
+  },
+  presetSummary: {
+    fontSize: 12,
+    fontStyle: "italic",
+    opacity: 0.8,
   },
   header: {
     flexDirection: "row",
