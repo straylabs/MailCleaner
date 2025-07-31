@@ -83,12 +83,21 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     const data = await res.json();
     let subject = "";
     let body = "";
+    let sender = "";
+    
     if (data.payload && data.payload.headers) {
       const subjectHeader = data.payload.headers.find(
         (h) => h.name.toLowerCase() === "subject"
       );
       if (subjectHeader) subject = subjectHeader.value;
+      
+      // Extract sender information (From header)
+      const fromHeader = data.payload.headers.find(
+        (h) => h.name.toLowerCase() === "from"
+      );
+      if (fromHeader) sender = fromHeader.value;
     }
+    
     if (data.payload && data.payload.parts) {
       for (const part of data.payload.parts) {
         if (part.mimeType === "text/plain" && part.body && part.body.data) {
@@ -111,8 +120,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
     let shouldDelete = false;
     if (preset) {
-      // Use PresetUtils to check if email matches preset criteria
-      shouldDelete = PresetUtils.doesEmailMatchPreset(subject, body, preset);
+      // Use PresetUtils to check if email matches preset criteria (including sender)
+      shouldDelete = PresetUtils.doesEmailMatchPreset(subject, body, sender, preset);
     }
     if (shouldDelete) {
       await fetch(
@@ -140,11 +149,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             scrollViewRef.current?.scrollToEnd({ animated: true });
           }, 100);
         }
-        return [...prev, subject];
+        // Include sender info in the log entry
+        const logEntry = sender ? `${subject} (from: ${sender})` : subject;
+        return [...prev, logEntry];
       });
-      console.log(`Deleted mail: ${subject}`);
+      console.log(`Deleted mail: ${subject} (from: ${sender})`);
     } else {
-      console.log("Email subject:", subject);
+      console.log("Email subject:", subject, "from:", sender);
     }
     // await new Promise((r) => setTimeout(r, 50));
     return data;
@@ -159,7 +170,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setSyncProgress(0);
     cancelSyncRef.current = false;
     let cancelled = false;
-    
+
     // Use the current preset from state
     if (!currentPreset) {
       setSyncing(false);
@@ -261,7 +272,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <Text style={[styles.presetDesc, { color: theme.textSecondary }]}>
               {selectedPreset.description}
             </Text>
-            <Text style={[styles.presetSummary, { color: theme.textSecondary }]}>
+            <Text
+              style={[styles.presetSummary, { color: theme.textSecondary }]}
+            >
               {PresetUtils.getPresetSummary(selectedPreset)}
             </Text>
           </>

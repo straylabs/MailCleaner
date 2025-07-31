@@ -98,16 +98,23 @@ export class PresetUtils {
   static doesEmailMatchPreset(
     emailSubject: string,
     emailBody: string,
+    emailSender: string,
     preset: Preset
   ): boolean {
     if (!preset.keywords.length) return false;
 
     const subjectLower = emailSubject.toLowerCase();
     const bodyLower = emailBody.toLowerCase();
+    const senderLower = emailSender.toLowerCase();
 
     // Count matches in subject
     const subjectMatches = preset.keywords.filter((keyword) =>
       subjectLower.includes(keyword.toLowerCase())
+    ).length;
+
+    // Count matches in sender
+    const senderMatches = preset.keywords.filter((keyword) =>
+      senderLower.includes(keyword.toLowerCase())
     ).length;
 
     // Count matches in body
@@ -116,8 +123,11 @@ export class PresetUtils {
     ).length;
 
     // Check if matches meet the minimum requirements
+    // Subject and sender matches are combined for subject requirement
+    const maxSubjectOrSenderMatches = Math.max(subjectMatches, senderMatches);
+
     return (
-      subjectMatches >= preset.MINIMUM_MATCH_IN_SUBJECT &&
+      maxSubjectOrSenderMatches >= preset.MINIMUM_MATCH_IN_SUBJECT &&
       bodyMatches >= preset.MINIMUM_MATCHES_IN_BODY
     );
   }
@@ -127,9 +137,14 @@ export class PresetUtils {
    * This is a helper function for the email cleaning logic
    */
   static getEmailsToProcess(
-    emails: Array<{ subject: string; body: string; id: string }>,
+    emails: Array<{
+      subject: string;
+      body: string;
+      sender: string;
+      id: string;
+    }>,
     presetId?: string
-  ): Array<{ subject: string; body: string; id: string }> {
+  ): Array<{ subject: string; body: string; sender: string; id: string }> {
     const preset = presetId
       ? this.getAllPresets().find((p) => p.id === presetId)
       : this.getCurrentPreset();
@@ -137,7 +152,7 @@ export class PresetUtils {
     if (!preset) return [];
 
     return emails.filter((email) =>
-      this.doesEmailMatchPreset(email.subject, email.body, preset)
+      this.doesEmailMatchPreset(email.subject, email.body, email.sender, preset)
     );
   }
 
@@ -147,7 +162,7 @@ export class PresetUtils {
   static getPresetSummary(preset: Preset): string {
     const keywordCount = preset.keywords.length;
     const customLabel = this.isCustomPreset(preset.id) ? " (Custom)" : "";
-    return `${keywordCount} keywords, ${preset.MINIMUM_MATCH_IN_SUBJECT} subject matches, ${preset.MINIMUM_MATCHES_IN_BODY} body matches${customLabel}`;
+    return `${keywordCount} keywords, ${preset.MINIMUM_MATCH_IN_SUBJECT} subject+sender matches, ${preset.MINIMUM_MATCHES_IN_BODY} body matches${customLabel}`;
   }
 
   /**
@@ -162,19 +177,26 @@ export class PresetUtils {
    * This can be used for debugging and testing purposes
    */
   static testKeywordMatching(
-    testEmail: { subject: string; body: string },
+    testEmail: { subject: string; body: string; sender: string },
     testKeywords: string[]
   ): {
     subjectMatches: string[];
+    senderMatches: string[];
     bodyMatches: string[];
     totalSubjectMatches: number;
+    totalSenderMatches: number;
     totalBodyMatches: number;
   } {
     const subjectLower = testEmail.subject.toLowerCase();
     const bodyLower = testEmail.body.toLowerCase();
+    const senderLower = testEmail.sender.toLowerCase();
 
     const subjectMatches = testKeywords.filter((keyword) =>
       subjectLower.includes(keyword.toLowerCase())
+    );
+
+    const senderMatches = testKeywords.filter((keyword) =>
+      senderLower.includes(keyword.toLowerCase())
     );
 
     const bodyMatches = testKeywords.filter((keyword) =>
@@ -183,8 +205,10 @@ export class PresetUtils {
 
     return {
       subjectMatches,
+      senderMatches,
       bodyMatches,
       totalSubjectMatches: subjectMatches.length,
+      totalSenderMatches: senderMatches.length,
       totalBodyMatches: bodyMatches.length,
     };
   }
