@@ -23,6 +23,21 @@ const config: ExpoConfig = {
   plugins: [
     "expo-font",
     [
+      "expo-notifications",
+      {
+        icon: "./branding/icon.png",
+        color: "#2D9CDB",
+        defaultChannel: "email-cleaning",
+        sounds: ["./assets/notification.wav"],
+      },
+    ],
+    [
+      "expo-task-manager",
+      {
+        enabledServices: ["background-sync"],
+      },
+    ],
+    [
       "@react-native-google-signin/google-signin",
       {
         iosUrlScheme:

@@ -7,6 +7,11 @@ export const enum StorageKey {
   CURRENT_PRESET = "current_preset",
   GOOGLE_TOKEN = "google_token",
   CUSTOM_PRESETS = "custom_presets",
+  DELETED_MESSAGES = "deleted_messages",
+  BACKGROUND_TASK_STATE = "background_task_state",
+  SYNC_PROGRESS = "sync_progress",
+  NOTIFICATION_SETTINGS = "notification_settings",
+  TASK_HISTORY = "task_history",
 }
 
 // Initialize storage

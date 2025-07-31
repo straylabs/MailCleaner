@@ -4,27 +4,47 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from "react-native";
 import React, { useEffect, useState } from "react";
 import { useTheme } from "@/utils/ThemeContext";
 import Screen from "@/components/Screen";
-import { StorageUtils, StorageKey } from "@/utils/Storage";
 import { Preset } from "@/screens/PresetsScreen";
 import { PresetUtils } from "@/utils/PresetUtils";
 import { useAuth } from "@/utils/AuthContext";
 import Avatar from "@/components/Avatar";
 import CustomAlert from "@/components/CustomAlert";
-import { Sun, Moon, LogOut, Trash2 } from "lucide-react-native";
+import {
+  Sun,
+  Moon,
+  LogOut,
+  Trash2,
+  Bell,
+  BellOff,
+  Play,
+  Square,
+  RotateCcw,
+} from "lucide-react-native";
 import { AppScreenProps } from "@/navigation/types";
 import Button from "@/components/Button";
+import { useSyncManager } from "@/utils/useSyncManager";
 
 type HomeScreenProps = AppScreenProps<"Home">;
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
-  const [deletedMailLog, setDeletedMailLog] = useState<string[]>([]);
   const scrollViewRef = React.useRef<ScrollView>(null);
   const [isAtEnd, setIsAtEnd] = useState(true);
   const [currentPreset, setCurrentPreset] = useState<Preset | null>(null);
+
+  // Use the sync manager hook
+  const {
+    syncState,
+    startSync,
+    stopSync,
+    clearDeletedMessages,
+    refreshState,
+    requestNotificationPermissions,
+  } = useSyncManager();
 
   // Load current preset when component mounts or when navigation focuses
   const loadCurrentPreset = React.useCallback(() => {
@@ -35,207 +55,109 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   React.useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
       loadCurrentPreset();
+      refreshState();
     });
     return unsubscribe;
-  }, [navigation, loadCurrentPreset]);
+  }, [navigation, loadCurrentPreset, refreshState]);
 
   // Load preset on initial mount
   React.useEffect(() => {
     loadCurrentPreset();
   }, [loadCurrentPreset]);
+
   const { theme, toggleTheme, isDarkMode } = useTheme();
   const { logout, authState } = useAuth();
   const [showLogoutAlert, setShowLogoutAlert] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState(0);
-  const cancelSyncRef = React.useRef(false);
 
-  async function getGmailMessages(token, pageToken) {
-    const baseUrl = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
-    let url = baseUrl + `?maxResults=10`;
-    if (pageToken) url += `&pageToken=${pageToken}`;
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error("Gmail fetch error:", res.status, errorText);
-      console.error("Token used:", token);
-      throw new Error("Failed to fetch Gmail messages");
+  // Auto-scroll to end when new messages are deleted
+  React.useEffect(() => {
+    if (
+      isAtEnd &&
+      scrollViewRef.current &&
+      syncState.deletedMessages.length > 0
+    ) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     }
-    const data = await res.json();
-    return {
-      messages: data.messages || [],
-      nextPageToken: data.nextPageToken,
-    };
-  }
+  }, [syncState.deletedMessages.length, isAtEnd]);
 
-  async function parseGmailMessage(msg, token, preset: Preset | null) {
-    const url = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`;
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (!res.ok) throw new Error("Failed to fetch Gmail message details");
-    const data = await res.json();
-    let subject = "";
-    let body = "";
-    let sender = "";
-    
-    if (data.payload && data.payload.headers) {
-      const subjectHeader = data.payload.headers.find(
-        (h) => h.name.toLowerCase() === "subject"
-      );
-      if (subjectHeader) subject = subjectHeader.value;
-      
-      // Extract sender information (From header)
-      const fromHeader = data.payload.headers.find(
-        (h) => h.name.toLowerCase() === "from"
-      );
-      if (fromHeader) sender = fromHeader.value;
-    }
-    
-    if (data.payload && data.payload.parts) {
-      for (const part of data.payload.parts) {
-        if (part.mimeType === "text/plain" && part.body && part.body.data) {
-          body += decodeURIComponent(
-            escape(
-              window.atob(part.body.data.replace(/-/g, "+").replace(/_/g, "/"))
-            )
-          );
-        }
-      }
-    } else if (data.payload && data.payload.body && data.payload.body.data) {
-      body += decodeURIComponent(
-        escape(
-          window.atob(
-            data.payload.body.data.replace(/-/g, "+").replace(/_/g, "/")
-          )
-        )
-      );
-    }
-
-    let shouldDelete = false;
-    if (preset) {
-      // Use PresetUtils to check if email matches preset criteria (including sender)
-      shouldDelete = PresetUtils.doesEmailMatchPreset(subject, body, sender, preset);
-    }
-    if (shouldDelete) {
-      await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}/trash`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      setDeletedMailLog((prev) => {
-        // If user is at end, scroll after update
-        if (isAtEnd && scrollViewRef.current) {
-          setTimeout(() => {
-            scrollViewRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-        }
-        // Include sender info in the log entry
-        const logEntry = sender ? `${subject} (from: ${sender})` : subject;
-        return [...prev, logEntry];
-      });
-      console.log(`Deleted mail: ${subject} (from: ${sender})`);
-    } else {
-      console.log("Email subject:", subject, "from:", sender);
-    }
-    // await new Promise((r) => setTimeout(r, 50));
-    return data;
-  }
-
-  const COOLDOWN_MS = 10;
-
-  async function syncGmailMessages(token) {
-    let nextPageToken = undefined;
-    let totalParsed = 0;
-    setSyncing(true);
-    setSyncProgress(0);
-    cancelSyncRef.current = false;
-    let cancelled = false;
-
-    // Use the current preset from state
+  const handleStartSync = async (runInBackground: boolean = false) => {
     if (!currentPreset) {
-      setSyncing(false);
+      Alert.alert("Error", "Please select a preset first");
       return;
     }
+
     try {
-      let shouldBreak = false;
-      do {
-        if (cancelSyncRef.current) {
-          cancelled = true;
-          shouldBreak = true;
-          break;
-        }
-        const { messages, nextPageToken: newToken } = await getGmailMessages(
-          token,
-          nextPageToken
-        );
-        for (const msg of messages) {
-          if (cancelSyncRef.current) {
-            cancelled = true;
-            shouldBreak = true;
-            break;
-          }
-          await parseGmailMessage(msg, token, currentPreset);
-          totalParsed++;
-          setSyncProgress(totalParsed);
-          if (cancelSyncRef.current) {
-            cancelled = true;
-            shouldBreak = true;
-            break;
-          }
-          // await new Promise((r) => setTimeout(r, COOLDOWN_MS));
-        }
-        if (shouldBreak) break;
-        nextPageToken = newToken;
-        if (cancelSyncRef.current) {
-          cancelled = true;
-          break;
-        }
-        // await new Promise((r) => setTimeout(r, COOLDOWN_MS));
-      } while (nextPageToken && !cancelSyncRef.current);
-    } catch (err) {
-      console.error("Sync error:", err);
+      await startSync(runInBackground);
+    } catch (error) {
+      Alert.alert("Error", error.message || "Failed to start sync");
     }
-    setSyncing(false);
-    if (cancelled) {
-      console.log("Sync cancelled by user.");
-    }
-  }
-
-  const handleStartSync = async () => {
-    if (syncing) return;
-    cancelSyncRef.current = false;
-    const token = authState.accessToken;
-    console.log("Starting Gmail sync with token:", token);
-    await syncGmailMessages(token);
   };
 
-  const handleCancelSync = () => {
-    cancelSyncRef.current = true;
-    setSyncing(false);
+  const handleStopSync = async () => {
+    try {
+      await stopSync();
+    } catch (error) {
+      Alert.alert("Error", "Failed to stop sync");
+    }
   };
 
-  // selectedPreset is now just currentPreset
-  const selectedPreset = currentPreset;
+  const handleClearLog = () => {
+    Alert.alert(
+      "Clear Log",
+      "Are you sure you want to clear the deleted messages log?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: clearDeletedMessages,
+        },
+      ]
+    );
+  };
+
+  const showSyncOptions = () => {
+    if (!syncState.canRunInBackground) {
+      // No notification permission, just start foreground sync
+      handleStartSync(false);
+      return;
+    }
+
+    Alert.alert(
+      "Start Email Cleaning",
+      "Choose how you want to run the email cleaning process:",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Foreground Only",
+          onPress: () => handleStartSync(false),
+        },
+        {
+          text: "Background + Notifications",
+          onPress: () => handleStartSync(true),
+        },
+      ]
+    );
+  };
+
+  const formatDeletedMessagesForDisplay = () => {
+    return syncState.deletedMessages.map(
+      (msg) => `${msg.subject}${msg.sender ? ` (from: ${msg.sender})` : ""}`
+    );
+  };
+
+  const isAnySyncRunning =
+    syncState.isRunning || syncState.backgroundTaskState.isRunning;
+  const totalProgress = Math.max(
+    syncState.progress.processed,
+    syncState.backgroundTaskState.totalProcessed
+  );
+  const totalDeleted = Math.max(
+    syncState.progress.deleted,
+    syncState.backgroundTaskState.totalDeleted
+  );
 
   return (
     <Screen useSafeArea>
@@ -247,6 +169,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </Text>
         </View>
         <View style={styles.headerRight}>
+          <TouchableOpacity
+            onPress={requestNotificationPermissions}
+            style={styles.iconButton}
+          >
+            {syncState.canRunInBackground ? (
+              <Bell size={24} color={theme.primary} />
+            ) : (
+              <BellOff size={24} color={theme.textSecondary} />
+            )}
+          </TouchableOpacity>
           <TouchableOpacity onPress={toggleTheme} style={styles.iconButton}>
             {isDarkMode ? (
               <Sun size={28} color={theme.textSecondary} />
@@ -263,19 +195,148 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         </View>
       </View>
 
+      {/* Sync Status Section */}
+      {(isAnySyncRunning || syncState.backgroundTaskState.lastError) && (
+        <View
+          style={[
+            styles.syncStatusContainer,
+            { backgroundColor: theme.surface },
+          ]}
+        >
+          {isAnySyncRunning ? (
+            <>
+              <View style={styles.syncStatusHeader}>
+                <Text
+                  style={[styles.syncStatusTitle, { color: theme.primary }]}
+                >
+                  📧 Email Cleaning in Progress
+                </Text>
+                <TouchableOpacity onPress={refreshState}>
+                  <RotateCcw size={16} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Progress Statistics */}
+              <Text style={[styles.syncStatusText, { color: theme.text }]}>
+                Processed: {totalProgress} | Deleted: {totalDeleted}
+              </Text>
+
+              {/* Current Phase and Action */}
+              {syncState.backgroundTaskState.currentPhase && (
+                <Text
+                  style={[
+                    styles.syncStatusText,
+                    { color: theme.textSecondary, fontSize: 13 },
+                  ]}
+                >
+                  Phase: {syncState.backgroundTaskState.currentPhase}
+                </Text>
+              )}
+
+              {syncState.progress.currentAction && (
+                <Text
+                  style={[
+                    styles.syncStatusSubtext,
+                    { color: theme.textSecondary },
+                  ]}
+                >
+                  {syncState.progress.currentAction}
+                </Text>
+              )}
+
+              {/* Progress Bar */}
+              {syncState.progress.percentage !== undefined && (
+                <View style={styles.progressBarContainer}>
+                  <View
+                    style={[
+                      styles.progressBar,
+                      { backgroundColor: theme.border },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.progressBarFill,
+                        {
+                          backgroundColor: theme.primary,
+                          width: `${Math.min(
+                            syncState.progress.percentage,
+                            100
+                          )}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.progressText,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    {Math.round(syncState.progress.percentage)}%
+                  </Text>
+                </View>
+              )}
+
+              {/* Estimated Time Remaining */}
+              {syncState.backgroundTaskState.estimatedTimeRemaining &&
+                syncState.backgroundTaskState.estimatedTimeRemaining > 0 && (
+                  <Text
+                    style={[
+                      styles.syncStatusSubtext,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    ⏱️ Est.{" "}
+                    {Math.round(
+                      syncState.backgroundTaskState.estimatedTimeRemaining / 60
+                    )}
+                    m remaining
+                  </Text>
+                )}
+
+              {/* Background/Foreground indicator */}
+              {syncState.backgroundTaskState.isRunning ? (
+                <Text
+                  style={[styles.syncStatusSubtext, { color: theme.accent }]}
+                >
+                  🔔 Running in background with notifications
+                </Text>
+              ) : (
+                <Text
+                  style={[styles.syncStatusSubtext, { color: theme.primary }]}
+                >
+                  📱 Running in foreground
+                </Text>
+              )}
+            </>
+          ) : syncState.backgroundTaskState.lastError ? (
+            <>
+              <Text style={[styles.syncStatusTitle, { color: theme.error }]}>
+                ❌ Last Sync Error
+              </Text>
+              <Text
+                style={[styles.syncStatusText, { color: theme.textSecondary }]}
+              >
+                {syncState.backgroundTaskState.lastError}
+              </Text>
+            </>
+          ) : null}
+        </View>
+      )}
+
       <View style={styles.presetInfoContainer}>
-        {selectedPreset ? (
+        {currentPreset ? (
           <>
             <Text style={[styles.presetTitle, { color: theme.text }]}>
-              Preset: {selectedPreset.name}
+              Preset: {currentPreset.name}
             </Text>
             <Text style={[styles.presetDesc, { color: theme.textSecondary }]}>
-              {selectedPreset.description}
+              {currentPreset.description}
             </Text>
             <Text
               style={[styles.presetSummary, { color: theme.textSecondary }]}
             >
-              {PresetUtils.getPresetSummary(selectedPreset)}
+              {PresetUtils.getPresetSummary(currentPreset)}
             </Text>
           </>
         ) : (
@@ -317,7 +378,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         onScroll={(e) => {
           const { layoutMeasurement, contentOffset, contentSize } =
             e.nativeEvent;
-          // If user is within 30px of the end, consider at end
           setIsAtEnd(
             layoutMeasurement.height + contentOffset.y >=
               contentSize.height - 30
@@ -326,12 +386,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         scrollEventThrottle={32}
       >
         {/* Deleted mail log */}
-        {deletedMailLog.length > 0 && (
+        {syncState.deletedMessages.length > 0 && (
           <View style={styles.deletedLogContainer}>
-            <Text style={[styles.deletedLogTitle, { color: theme.text }]}>
-              Deleted Mails ({deletedMailLog.length})
-            </Text>
-            {deletedMailLog.map((subject, idx) => (
+            <View style={styles.deletedLogHeader}>
+              <Text style={[styles.deletedLogTitle, { color: theme.text }]}>
+                Deleted Mails ({syncState.deletedMessages.length})
+              </Text>
+              <TouchableOpacity onPress={handleClearLog}>
+                <Trash2 size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            {formatDeletedMessagesForDisplay().map((subject, idx) => (
               <View key={idx} style={styles.deletedLogItemRow}>
                 <Trash2
                   size={18}
@@ -362,21 +427,24 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         >
           Manage Presets
         </Button>
-        <Button
-          variant="primary"
-          style={styles.syncButton}
-          onPress={handleStartSync}
-          disabled={syncing || !currentPreset}
-        >
-          {syncing ? `Syncing... (${syncProgress})` : "Start Sync"}
-        </Button>
-        {syncing && (
+        {isAnySyncRunning ? (
           <Button
             variant="destructive"
             style={styles.syncButton}
-            onPress={handleCancelSync}
+            onPress={handleStopSync}
+            leftIcon={<Square size={16} color="#fff" />}
           >
-            Cancel
+            Stop
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            style={styles.syncButton}
+            onPress={showSyncOptions}
+            disabled={!currentPreset}
+            leftIcon={<Play size={16} color="#fff" />}
+          >
+            Start Clean
           </Button>
         )}
       </View>
@@ -385,6 +453,55 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  syncStatusContainer: {
+    margin: 16,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(45, 156, 219, 0.2)",
+  },
+  syncStatusHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  syncStatusTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  syncStatusText: {
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  syncStatusSubtext: {
+    fontSize: 12,
+    fontStyle: "italic",
+  },
+  progressBarContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  progressBar: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 8,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    borderRadius: 3,
+    minWidth: 2,
+  },
+  progressText: {
+    fontSize: 11,
+    fontWeight: "600",
+    minWidth: 35,
+    textAlign: "right",
+  },
   deletedLogContainer: {
     marginBottom: 16,
     padding: 10,
@@ -397,10 +514,15 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
+  deletedLogHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
   deletedLogTitle: {
     fontSize: 17,
     fontWeight: "700",
-    marginBottom: 10,
     letterSpacing: 0.2,
   },
   deletedLogItemRow: {
